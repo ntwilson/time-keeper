@@ -13,15 +13,17 @@ let runProc name (args:string[]) =
 let readFile filename =
   File.ReadAllLines filename
 
+let appendToFile line filename =
+  File.AppendAllLines (filename, [line])
+
 let startsWith prefix (str:string) = str.StartsWith prefix 
 
 let clockedOut filename = 
+  if not (File.Exists filename) then appendToFile "" filename
   let lines = readFile filename
-  lines |> Seq.isEmpty
-    || lines |> Seq.last |> startsWith "Clocked out:"
 
-let appendToFile line filename =
-  File.AppendAllLines (filename, [line])
+  if lines |> Seq.isEmpty then true
+  else not (lines |> Seq.last |> startsWith "Clocked in:")
 
 let clockIn args filename = 
   if not (clockedOut filename) then Result.Error "ERR: didn't do anything: you're already clocked in!"
