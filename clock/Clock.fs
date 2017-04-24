@@ -8,9 +8,8 @@ let runProc name (args:string[]) =
   let procInfo = ProcessStartInfo (name, String.Join (" ", args))
   procInfo.UseShellExecute <- false
 
-  let proc = Process.Start procInfo
+  use proc = Process.Start procInfo
   proc.WaitForExit ()
-  proc.Close ()
 
 let split delimiter (s:string) = s.Split [|delimiter|]
 let startsWith prefix (str:string) = str.StartsWith prefix 
