@@ -5,15 +5,18 @@ open System.IO
 open System.Diagnostics
 open TimeKeeper
 
-let runProc name (args:string[]) =
-  io {
-    let procInfo = ProcessStartInfo (name, String.Join (" ", args))
-    procInfo.UseShellExecute <- false
+let runProcFromInfo (procInfo:ProcessStartInfo) = 
+  let run () =
+    use proc = Process.Start procInfo
+    proc.WaitForExit ()
 
-    do! IO (fun () -> 
-      use proc = Process.Start procInfo
-      proc.WaitForExit ())
-  }
+  IO run
+
+let runProc name (args:string[]) =
+  let procInfo = ProcessStartInfo (name, String.Join (" ", args))
+  procInfo.UseShellExecute <- false
+
+  runProcFromInfo procInfo
 
 let split delimiter (s:string) = s.Split [|delimiter|]
 let startsWith prefix (str:string) = str.StartsWith prefix 

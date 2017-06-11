@@ -31,27 +31,7 @@ type IOExpression() =
 
   member this.ReturnFrom x = x
 
-  member this.TryFinally (body, finish) =
-    try
-      this.ReturnFrom (body ())
-    finally 
-      finish ()
-
-  member this.Using (disp : #System.IDisposable, cexpr) =
-    let evaluate () = cexpr disp
-    this.TryFinally (evaluate, 
-      fun () -> 
-        match disp with
-        | null -> ()
-        | _ -> disp.Dispose ())
-
   member this.Zero () = this.Return ()
-
-  member this.Combine (f, g) =
-    this.Bind (f, fun () -> g)
-
-  member this.Delay f = f
-  member this.Run f = f ()
 
 [<AutoOpen>]
 module IOExpression = 
