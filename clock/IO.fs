@@ -10,15 +10,22 @@ module IO =
   let make4 f a b c d = make (f a b c) d
   let make5 f a b c d e = make (f a b c d) e
 
-
-type IOExpression() =
-  member this.Bind (f, cexpr) =     
+  let bind expr f = 
     let evaluate () =
-      IO.run f
-      |> cexpr
-      |> IO.run
+      run f
+      |> expr
+      |> run
 
     IO evaluate
+
+  let map expr f =
+    let ret x = IO (fun () -> x) 
+
+    f |> bind (expr >> ret)
+
+
+type IOExpression() =
+  member this.Bind (f, cexpr) = IO.bind cexpr f    
 
   member this.Return x = IO (fun () -> x)
 

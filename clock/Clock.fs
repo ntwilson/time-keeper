@@ -10,8 +10,9 @@ let runProc name (args:string[]) =
     let procInfo = ProcessStartInfo (name, String.Join (" ", args))
     procInfo.UseShellExecute <- false
 
-    use! proc = IO (fun () -> Process.Start procInfo)
-    do! IO (fun () -> proc.WaitForExit ())
+    do! IO (fun () -> 
+      use proc = Process.Start procInfo
+      proc.WaitForExit ())
   }
 
 let split delimiter (s:string) = s.Split [|delimiter|]
