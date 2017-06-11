@@ -1,69 +1,112 @@
-﻿module rec TimeKeeper
+﻿module rec TimeKeeper.Main
 
 open System
 open System.IO
 open System.Diagnostics
+open TimeKeeper
 
 let runProc name (args:string[]) =
-  let procInfo = ProcessStartInfo (name, String.Join (" ", args))
-  procInfo.UseShellExecute <- false
+  io {
+    let procInfo = ProcessStartInfo (name, String.Join (" ", args))
+    procInfo.UseShellExecute <- false
 
-  use proc = Process.Start procInfo
-  proc.WaitForExit ()
+    use! proc = IO (fun () -> Process.Start procInfo)
+    do! IO (fun () -> proc.WaitForExit ())
+  }
 
 let split delimiter (s:string) = s.Split [|delimiter|]
 let startsWith prefix (str:string) = str.StartsWith prefix 
 
 let readFile filename =
-  File.ReadAllLines filename
-  |> Array.map (split ',')
+  io {
+    let! lines = IO (fun () -> File.ReadAllLines filename)
+    return lines |> Array.map (split ',')
+  }
 
 let appendToFile (line:string[]) filename =
-  let rawLine = String.Join (",", line)
-  File.AppendAllText (filename, rawLine)
+  io {
+    let rawLine = String.Join (",", line)
+    do! IO (fun () -> File.AppendAllText (filename, rawLine))
+  }
+
+let createFileIfNeeded filename = 
+  io {
+    let! exists = IO (fun () -> File.Exists filename)
+    if not exists then
+      do! appendToFile [|"Clocked in:"; "Clocked out:"; "Time elapsed"|] filename 
+  }
+
+let clockedOutFromContents lines =   
+  if lines |> Seq.isEmpty then 
+    true
+  else 
+    (lines |> Seq.last |> Seq.length) > 1
+
 
 let clockedOut filename = 
-  if not (File.Exists filename) then appendToFile [|"Clocked in:"; "Clocked out:"; "Time elapsed"|] filename
-  let lines = readFile filename
-
-  if lines |> Seq.isEmpty then true
-  else (lines |> Seq.last |> Seq.length) > 1
+  io {
+    let! lines = readFile filename
+    return clockedOutFromContents lines
+  }
 
 let clockIn args filename = 
-  if not (clockedOut filename) then Result.Error "ERR: didn't do anything: you're already clocked in!"
-  else
-    let inTime = DateTime.Now
-    appendToFile [|"\n" + (inTime.ToString ())|] filename
-    Result.Ok ("Clocked in at: " + inTime.ToString ())
+  io {
+    let! isClockedOut = clockedOut filename
+    if not isClockedOut then 
+      return Result.Error "ERR: didn't do anything: you're already clocked in!"
+    else
+      let inTime = DateTime.Now
+      do! appendToFile [|"\n" + (inTime.ToString ())|] filename
+      return Result.Ok ("Clocked in at: " + inTime.ToString ())
+  }
 
 let clockOut args filename = 
-  if clockedOut filename then Result.Error "ERR: didn't do anything: you aren't clocked in!"
-  else
-    let outTime = DateTime.Now
-    let elapsedTime = outTime - (inTime filename)
-    appendToFile [|"," + (DateTime.Now.ToString ()); (elapsedTime.ToString ())|] filename
-    Result.Ok ("Clocked out; elapsed time: " + elapsedTime.ToString ())
+  io {
+    let! isClockedOut = clockedOut filename
+    if isClockedOut then 
+      return Result.Error "ERR: didn't do anything: you aren't clocked in!"
+    else
+      let outTime = DateTime.Now
+      let! inTime' = inTime filename
+      let elapsedTime = outTime - inTime'
+      do! appendToFile [|"," + (DateTime.Now.ToString ()); (elapsedTime.ToString ())|] filename
+      return Result.Ok ("Clocked out; elapsed time: " + elapsedTime.ToString ())
+  }
+
+let inTimeFromFile = 
+  Seq.last >> Seq.head >> string >> Convert.ToDateTime
 
 let inTime filename =
-  let inStr = 
-    readFile filename
-    |> Seq.last |> Seq.head
-  
-  Convert.ToDateTime inStr
+  io {
+    let! fileContents = readFile filename
+    return inTimeFromFile fileContents
+  }
 
 let openFile filename = 
-  runProc @"C:\Program Files (x86)\Microsoft Office\Office15\excel" [| filename |]
+  runProc "notepad++" [| filename |]
+
+let workflow argv filename = 
+  io {
+    do! createFileIfNeeded filename
+
+    return!
+      match argv |> List.ofArray with
+      | "in" :: args -> clockIn args filename 
+      | "out" :: args -> clockOut args filename
+      | "open" :: args -> 
+        io { 
+          do! openFile filename 
+          return Result.Ok ""
+        }
+      | [] -> io { return Result.Error "You need to specify an argument" }
+      | _ -> io { return Result.Error "huh?" }
+  }
 
 [<EntryPoint>]
 let main argv = 
   let filename = Path.Combine (AppDomain.CurrentDomain.BaseDirectory, "timesheet.csv")
-  let rslt = 
-    match argv |> List.ofArray with
-    | "in" :: args -> clockIn args filename 
-    | "out" :: args -> clockOut args filename
-    | "open" :: args -> openFile filename; Result.Ok ""
-    | [] -> Result.Error "You need to specify an argument"
-    | _ -> Result.Error "huh?"
+
+  let rslt = workflow argv filename |> IO.run
 
   let msg = 
     match rslt with
